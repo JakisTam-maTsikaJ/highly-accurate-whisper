@@ -1,0 +1,15 @@
+
+services:
+  api:
+    container_name: whisper_janusz
+    image: jj_whisper:3.0.0
+    build: .
+    ports:
+      - "9000:8000"
+    volumes:
+      - ./app:/app/app
+    gpus: all
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    command: python -m uvicorn app.webservice:app --host 0.0.0.0 --port 8000 --reload
