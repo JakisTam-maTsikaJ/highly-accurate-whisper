@@ -3,7 +3,7 @@ docker compose up -d --build
 <br>
 
 ### How to run on GPU or CPU?
-To choose between GPU and CPU, go to the `docker-compose.yaml` file and comment or uncomment the appropriate section of the code.  
+To choose between GPU and CPU, set approptiate value in .env and then go to the `docker-compose.yaml` file and comment or uncomment the appropriate section of the code.  
 <br>
 
 ### How to change the Whisper model?
