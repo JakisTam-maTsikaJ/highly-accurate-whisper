@@ -20,10 +20,12 @@ HF_CACHE_DIR = os.path.join(MODEL_DIR, "hf_cache")
 class Model:
     def __init__(self, model_transcribe_name: str, model_diarize_name: str):
         use_cuda = os.getenv("USE_CUDA", "false").lower() == "true"
+        print(f"User wants to set device cuda: {use_cuda}")
         if use_cuda == "true":
             self.device = "cuda"
         else:
             self.device = "cpu"
+        print(f"Device is {self.device}")
         
         self.model_transcribe_name = model_transcribe_name
         self.model_diarize_name = model_diarize_name

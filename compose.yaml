@@ -9,7 +9,7 @@ services:
       args:
         USE_CUDA: true  # true or false 
     ports:
-      - "${PORT}:8000"
+      - "9000:8000"
     volumes:
       - ./app:/app/app
     gpus: all
