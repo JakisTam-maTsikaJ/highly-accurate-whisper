@@ -3,7 +3,7 @@ services:
   # use api with gpu
   api:
     container_name: whisper
-    image: c
+    image: janusz_whisper
     build:
       context: .
       args:
@@ -24,7 +24,7 @@ services:
   # use api with cpu
   # api:
   #   container_name: whisper
-  #   image: whisper
+  #   image: janusz_whisper
   #   build:
   #     context: .
   #     args:
