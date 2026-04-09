@@ -342,7 +342,7 @@ class Model:
     def _filter_good_quality_segments(self, whole_segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         for i in range(len(whole_segments) - 1, -1, -1):
-            if whole_segments[i]['avg_logprob'] <= -1 or whole_segments[i]['compression_ratio'] >= 2.0 or whole_segments[i]['language']:
+            if whole_segments[i]['avg_logprob'] <= -1 or whole_segments[i]['compression_ratio'] >= 2.0:
                 del whole_segments[i]
 
         return whole_segments
