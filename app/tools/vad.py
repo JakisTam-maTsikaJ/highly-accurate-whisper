@@ -25,7 +25,7 @@ vad_model, vad_utils = torch.hub.load(
 (get_speech_timestamps, _, _, _, _) = vad_utils
 
 use_cuda = os.getenv("USE_CUDA", "false").lower() == "true"
-if use_cuda == "true":
+if use_cuda:
     vad_model = vad_model.to("cuda")
 vad_model.eval()
 
@@ -100,7 +100,7 @@ def _vad_gate_1d(
     """Gating na 1 kanale -> zwraca (audio_po_gate, sr_użyty)."""
     audio_rs, sr2 = _resample_1d_np(audio_1d, sr, target_sr)
 
-    if use_cuda == "true":
+    if use_cuda:
         wav = torch.from_numpy(audio_rs).float().to("cuda")
     else:
         wav = torch.from_numpy(audio_rs).float()
