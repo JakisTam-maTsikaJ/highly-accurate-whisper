@@ -7,11 +7,11 @@ To choose between GPU and CPU, set approptiate value in .env and then go to the 
 <br>
 
 ### How to change the Whisper model?
-To change the Whisper model, update the appropriate value in the `config.env` file.  
+To change the Whisper model, update the appropriate value in the `.env` file.  
 <br>
 
 ### How to change the language?
-For better model accuracy, a single language is selected. If you want to change it, you can do so in the `config.env` file.  
+For better model accuracy, a single language is selected. If you want to change it, you can do so in the `.env` file.  
 <br>
 
 ### Can I transcribe multi-channel audio?
