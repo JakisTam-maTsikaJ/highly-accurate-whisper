@@ -22,12 +22,16 @@ RUN ln -sf /usr/bin/python3.10 /usr/local/bin/python && \
 # Install Python deps (cached layer)
 COPY req.txt /app/req.txt
 
+ARG USE_CUDA
+
 RUN python -m pip install --upgrade pip && \
     python -m pip install -r /app/req.txt && \
-    python -m pip install --force-reinstall --no-cache-dir \
-      --index-url https://download.pytorch.org/whl/cu128 \
-      torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0
-    
+    if [ "$USE_CUDA" = "true" ]; then \
+        echo "Installing PyTorch with CUDA..." && \
+        python -m pip install --force-reinstall --no-cache-dir \
+          --index-url https://download.pytorch.org/whl/cu128 \
+          torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0; \
+    fi
 
 # Copy only app code (keeps cache efficient)
 COPY app /app/app

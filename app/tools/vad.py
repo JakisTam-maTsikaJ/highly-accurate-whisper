@@ -9,14 +9,12 @@ import os
 MODEL_DIR = "./models"
 TORCH_CACHE_DIR = os.path.join(MODEL_DIR, "torch_cache")
 
-# 🔹 utworzenie katalogów
 os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(TORCH_CACHE_DIR, exist_ok=True)
 
-# 🔹 ustawienie cache dla torch.hub
 torch.hub.set_dir(TORCH_CACHE_DIR)
 
-print("ładuję VAD")
+print("Loading the VAD model")
 
 vad_model, vad_utils = torch.hub.load(
     "snakers4/silero-vad",
@@ -26,7 +24,9 @@ vad_model, vad_utils = torch.hub.load(
 
 (get_speech_timestamps, _, _, _, _) = vad_utils
 
-vad_model = vad_model.to("cuda")
+use_cuda = os.getenv("USE_CUDA", "false").lower() == "true"
+if use_cuda == "true":
+    vad_model = vad_model.to("cuda")
 vad_model.eval()
 
 def _resample_1d_np(x: np.ndarray, sr: int, target_sr: int) -> tuple[np.ndarray, int]:
@@ -100,7 +100,10 @@ def _vad_gate_1d(
     """Gating na 1 kanale -> zwraca (audio_po_gate, sr_użyty)."""
     audio_rs, sr2 = _resample_1d_np(audio_1d, sr, target_sr)
 
-    wav = torch.from_numpy(audio_rs).float().to("cuda")
+    if use_cuda == "true":
+        wav = torch.from_numpy(audio_rs).float().to("cuda")
+    else:
+        wav = torch.from_numpy(audio_rs).float()
 
     speech = get_speech_timestamps(
         wav,
@@ -125,7 +128,7 @@ def _vad_gate_1d(
 
 
 @torch.no_grad()
-def silero_gate(
+def silero_gate_each_channel_then_merge_mono(
     in_wav: str,
     out_wav: str | None = None,
     *,
@@ -163,8 +166,6 @@ def silero_gate(
         
         print(channels_ranges)
 
-        
-        
         if not np.isfinite(y).all():
             raise ValueError("Audio contains NaN or Inf")
 
@@ -177,6 +178,51 @@ def silero_gate(
         audios_per_channels.append(str(out_path))
         return str(out_path), channels_ranges, audios_per_channels
 
-    else:
-        print("Rozmowa ma więcej niż jeden kanał!!!")
-        return "Rozmowa ma więcej niż jeden kanał!!!"
+    # --- MULTI-CHANNEL ---
+    processed: list[np.ndarray] = []
+    sr_used: int | None = None
+
+    for c in range(ch):
+        ch_audio = x[:, c].astype(np.float32, copy=False)
+
+        y, sr2, channel_ranges = _vad_gate_1d(
+            ch_audio, sr,
+            target_sr=target_sr,
+            threshold=threshold,
+            min_speech_ms=min_speech_ms,
+            min_silence_ms=min_silence_ms,
+            keep_silence_ms=keep_silence_ms,
+            fade_ms=fade_ms,
+        )
+
+        if sr_used is None:
+            sr_used = sr2
+        channels_ranges.append(channel_ranges)
+        processed.append(y)
+
+        max_abs = np.max(np.abs(y))
+        if max_abs > 1.0:
+            print(f"Warning: max abs = {max_abs}, clipping before save")
+            y = np.clip(y, -1.0, 1.0)
+        
+        out_path_one_channel = in_path.with_name(f"{in_path.stem}_channel_{c}{in_path.suffix}")
+        sf.write(str(out_path_one_channel), y, sr2)
+        audios_per_channels.append(str(out_path_one_channel))
+
+    print(channels_ranges)
+    
+    # wyrównanie długości (czasem resampling daje różnice o 1 próbkę)
+    min_len = min(len(p) for p in processed)
+    processed = [p[:min_len] for p in processed]
+
+    # downmix do mono
+    mono = np.mean(np.stack(processed, axis=0), axis=0).astype(np.float32)
+       
+    max_abs = np.max(np.abs(mono))
+    if max_abs > 1.0:
+        print(f"Warning: max abs = {max_abs}, clipping before save")
+        mono = np.clip(mono, -1.0, 1.0)
+    
+    sf.write(str(out_path), mono, int(sr_used))
+    return str(out_path), channels_ranges, audios_per_channels
+

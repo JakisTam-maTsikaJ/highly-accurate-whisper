@@ -5,17 +5,17 @@ from pathlib import Path
 import shutil
 import torch
 from gc import collect
+import os
 from app.tools.locks import gpu_lock
 
-audio_ext = [".wav", ".mp3", ".flac", ".ogg", ".m4a"]
 base_dir = Path(".")
-model = Model("large-v3", "nvidia/diar_streaming_sortformer_4spk-v2.1")
+model = Model(os.getenv("WHISPER_MODEL"), "nvidia/diar_streaming_sortformer_4spk-v2.1")
 model.load_models()
 app = FastAPI()
 
 def del_garbage():
     for item in base_dir.iterdir():
-        if item.name in {"app", "req.txt"}:
+        if item.name in {"app", "req.txt", "models"}:
             continue
 
         if item.is_dir():

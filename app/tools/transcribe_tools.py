@@ -13,76 +13,57 @@ from nemo.collections.asr.models import SortformerEncLabelModel
 from collections import defaultdict, Counter
 import re
 
-from app.tools.vad import silero_gate
+from app.tools.vad import silero_gate_each_channel_then_merge_mono
 MODEL_DIR = "./models"
 HF_CACHE_DIR = os.path.join(MODEL_DIR, "hf_cache")
 
 class Model:
     def __init__(self, model_transcribe_name: str, model_diarize_name: str):
+        use_cuda = os.getenv("USE_CUDA", "false").lower() == "true"
+        if use_cuda == "true":
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
+        
         self.model_transcribe_name = model_transcribe_name
         self.model_diarize_name = model_diarize_name
         self.engine_name = "openai-whisper"
         self.engine_version = version("openai-whisper")
         self.model_transcribe = None
         self.model_diarize = None
-        self.european_languages = [
-            "en",  # english
-            "de",  # german
-            # "es",  # spanish
-            # "fr",  # french
-            # "it",  # italian
-            # "pt",  # portuguese
-            "pl",  # polish
-            # "nl",  # dutch
-            # "sv",  # swedish
-            # "no",  # norwegian
-            # "da",  # danish
-            # "fi",  # finnish
-            "cs",  # czech
-            "sk",  # slovak
-            # "hu",  # hungarian
-            # "ro",  # romanian
-            # "bg",  # bulgarian
-            # "hr",  # croatian
-            # "sr",  # serbian
-            # "sl",  # slovenian
-            # "et",  # estonian
-            # "lv",  # latvian
-            "lt",  # lithuanian
-            # "el",  # greek
-            "uk",  # ukrainian
-            # "ru",  # russian
-        ]
+        self.language = os.getenv("LANGUAGE")
 
     def load_models(self):
-        # 🔹 katalog główny
         if not os.path.exists(MODEL_DIR):
             os.makedirs(MODEL_DIR)
-            print(f"Utworzono katalog: {MODEL_DIR}")
+            print(f"Directory created: {MODEL_DIR}")
         else:
-            print(f"Katalog już istnieje: {MODEL_DIR}")
+            print(f"The directory already exists: {MODEL_DIR}")
 
-        # 🔹 katalog cache dla HF / NeMo
         if not os.path.exists(HF_CACHE_DIR):
             os.makedirs(HF_CACHE_DIR)
-            print(f"Utworzono katalog HF cache: {HF_CACHE_DIR}")
+            print(f"HF cache directory has been created: {HF_CACHE_DIR}")
         else:
-            print(f"Katalog HF cache już istnieje: {HF_CACHE_DIR}")
+            print(f"The HF cache directory already exists: {HF_CACHE_DIR}")
 
-        # 🔹 ustawienie cache dla Hugging Face (ważne!)
         os.environ["HF_HOME"] = HF_CACHE_DIR
 
-        print("ładuję whispera")
+        print("Loading the Whisper model")
         self.model_transcribe = whisper.load_model(
             self.model_transcribe_name,
-            device="cuda",
+            device=self.device,
             download_root=MODEL_DIR
         ).eval()
 
-        print("ładuję model do diaryzacji")
+        print("Loading the diarization model")
         self.model_diarize = SortformerEncLabelModel.from_pretrained(
             self.model_diarize_name
-        ).eval()
+        )
+
+        if self.device == "cuda":
+            self.model_diarize.to(self.device)
+
+        self.model_diarize.eval()
 
         self.model_diarize.sortformer_modules.chunk_len = 340
         self.model_diarize.sortformer_modules.chunk_right_context = 40
@@ -115,7 +96,7 @@ class Model:
     def _audiosegment_to_np(self, seg: AudioSegment) -> np.ndarray:
         seg = seg.set_channels(1).set_frame_rate(16000)
         samples = np.array(seg.get_array_of_samples())
-        scale = float(1 << (8 * seg.sample_width - 1))  # np. 32768 dla 16-bit
+        scale = float(1 << (8 * seg.sample_width - 1))  
         return samples.astype(np.float32) / scale
     
     def _cut_silence_intervals(
@@ -147,13 +128,9 @@ class Model:
             e2 = min(dur, e + keep_silence)
             kept_ranges.append((s2, e2))
 
-        # kept_ranges = self._merge_ranges(kept_ranges, gap_ms)
         segments = self._find_segments(kept_ranges)  
         print(segments)
 
-        # === zbuduj listę segmentów audio ===
-    
-        # sortuj po numerku seg_0, seg_1, ...
         def _seg_key(name):
             try:
                 return int(name.split("_")[1])
@@ -186,7 +163,6 @@ class Model:
 
                 speaker_dict[speaker].append((start, end))
 
-            # zamiana na listę list (posortowane po nazwie speakera)
             return [speaker_dict[s] for s in sorted(speaker_dict.keys())]
 
         result_from_all_channels = []
@@ -212,7 +188,7 @@ class Model:
                 start = int(word['start'] * 1_000)  
                 end = int(word['end'] * 1_000)
 
-                to_subtract = 75 # 75 narazie najlepsze
+                to_subtract = 75 
                 to_add = 250
                 
                 word_ms_range = set(list(range(end - to_subtract, end + to_add)))
@@ -231,7 +207,6 @@ class Model:
 
                     word[f'{type_of_division}_{i}_score'] =  sum_for_one_speaker / (to_subtract + to_add)
                 
-            # ususwanie słów niczyich
             for i in range(len(segment['words']) - 1, -1, -1):
                 word = segment['words'][i] 
 
@@ -242,7 +217,6 @@ class Model:
                 if len(list_of_scores) > 1 and all(s == 0 for s in list_of_scores):
                     del segment['words'][i] 
 
-            # obługa remisów
             for i, word in enumerate(segment['words']): 
 
                 list_of_scores = []
@@ -263,7 +237,7 @@ class Model:
         
         for i, segment_audio in enumerate(segments_audio):
 
-            print(f"Generowanie tekstu dla segmentu {i+1} z {len(segments_audio)}.")
+            print(f"Generating text for the segment {i+1} z {len(segments_audio)}.")
 
             if np.all(segment_audio == 0):
                 result = {
@@ -292,14 +266,14 @@ class Model:
             
             if initial_prompt != "":
                 with torch.inference_mode():
-                    result = self.model_transcribe.transcribe(segment_audio, word_timestamps=True, initial_prompt=initial_prompt, language='pl', temperature=0)
-                print("Segment wygenerował się z promptem")
+                    result = self.model_transcribe.transcribe(segment_audio, word_timestamps=True, initial_prompt=initial_prompt, language=self.language, temperature=0)
+                print("The segment was generated with a prompt")
                 print(result['text'])
             else:
                 with torch.inference_mode():
-                    result = self.model_transcribe.transcribe(segment_audio, word_timestamps=True, language='pl',  temperature=0)
+                    result = self.model_transcribe.transcribe(segment_audio, word_timestamps=True, language=self.language,  temperature=0)
                 print(result['text'])
-                print("Segment wygenerował się BEZ promptu!")
+                print("The segment was generated WITHOUT a prompt!")
 
             results.append(result)
 
@@ -311,12 +285,12 @@ class Model:
                 word_counts = Counter(words)
                 has_repetition = any(count >= 10 for count in word_counts.values())
 
-                if result['segments'][0]["avg_logprob"] > -1 and result['segments'][0]["no_speech_prob"] < 0.5 and result['segments'][0]["compression_ratio"] < 2.0 and has_repetition is not True and result['language'] in self.european_languages:
+                if result['segments'][0]["avg_logprob"] > -1 and result['segments'][0]["no_speech_prob"] < 0.5 and result['segments'][0]["compression_ratio"] < 2.0 and has_repetition is not True and result['language']:
                     initial_prompt = result["text"]
                 else:
                     initial_prompt = ""
 
-                print(f'temperatura: {result["segments"][0]["temperature"]}, avg_logprob: {result["segments"][0]["avg_logprob"]}, no_speech_prob: {result["segments"][0]["no_speech_prob"]}, compression_ratio: {result["segments"][0]["compression_ratio"]}')
+                print(f'temperature: {result["segments"][0]["temperature"]}, avg_logprob: {result["segments"][0]["avg_logprob"]}, no_speech_prob: {result["segments"][0]["no_speech_prob"]}, compression_ratio: {result["segments"][0]["compression_ratio"]}')
             else:
                 initial_prompt = ""
 
@@ -366,7 +340,7 @@ class Model:
     def _filter_good_quality_segments(self, whole_segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         for i in range(len(whole_segments) - 1, -1, -1):
-            if whole_segments[i]['avg_logprob'] <= -1 or whole_segments[i]['compression_ratio'] >= 2.0 or whole_segments[i]['language'] not in self.european_languages:
+            if whole_segments[i]['avg_logprob'] <= -1 or whole_segments[i]['compression_ratio'] >= 2.0 or whole_segments[i]['language']:
                 del whole_segments[i]
 
         return whole_segments
@@ -393,22 +367,15 @@ class Model:
         return final_dict
 
     def transribe(self, path_to_audio: Union[str, Path], filter: bool = True):
-        folder = Path.cwd()  
-        audio_ext = [".wav", ".mp3", ".flac", ".ogg", ".m4a"]
-        
         try:
-            out_path, channel_ranges, audios_per_channel = silero_gate(path_to_audio)
+            out_path, channels_ranges, audios_per_channels = silero_gate_each_channel_then_merge_mono(path_to_audio)
             segments_audio, segments = self._cut_silence_intervals(out_path)
-            speakers_ranges = self._find_speakers(audios_per_channel)
-
-            for file in folder.iterdir():
-                if file.is_file() and file.suffix.lower() in audio_ext:
-                    file.unlink()
+            speakers_ranges = self._find_speakers(audios_per_channels)
 
             results = self._generate_transcriptions_of_segments(segments_audio)
             whole_segments = self._fix_time_stamps(results, segments)
             whole_segments = self._find_speaekr_per_word(whole_segments, speakers_ranges, True) # przydzielenie słów na podstawie diaryzacji
-            whole_segments = self._find_speaekr_per_word(whole_segments, channel_ranges, False) # przydzielenie słów na podstawie kanałów
+            whole_segments = self._find_speaekr_per_word(whole_segments, channels_ranges, False) # przydzielenie słów na podstawie kanałów
             
             if filter:
                 whole_segments = self._filter_good_quality_segments(whole_segments)
@@ -426,9 +393,5 @@ class Model:
                 collect()
             except Exception:
                 pass
-
-            for file in folder.iterdir():
-                if file.is_file() and file.suffix.lower() in audio_ext:
-                    file.unlink()
-
+            
             raise
