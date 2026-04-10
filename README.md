@@ -1,4 +1,5 @@
 # Important features
+- Easy and fast to implement <br>
 - High transcription accuracy <br>
 - Supports multi-channel audio <br> 
 - Built-in speaker diarization <br> 
