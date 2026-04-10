@@ -3,9 +3,7 @@
 - Supports multi-channel audio <br> 
 - Built-in speaker diarization <br> 
 
-# Any questions? You may find the answer below
-<br>
-
+# Any questions? You may find the answer below <br>
 ### How to run the app?
 docker compose up -d --build  
 <br>
