@@ -27,3 +27,6 @@ Yes, you can. Information about the channels will be included in the output. How
 
 ### More details
 More details, such as the output format and how to send a request, can be found in Swagger.
+
+#### Contact
+https://www.linkedin.com/in/jakub-janusz-10bb5a2ba/
