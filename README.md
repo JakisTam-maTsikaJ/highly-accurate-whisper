@@ -1,3 +1,8 @@
+### Important features
+- High transcription accuracy <br>
+- Supports multi-channel audio <br> 
+- Built-in speaker diarization <br> 
+
 ### How to run the app?
 docker compose up -d --build  
 <br>
