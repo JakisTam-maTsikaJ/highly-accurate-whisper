@@ -24,7 +24,7 @@ def del_garbage():
             item.unlink()
 
 @app.post("/asr")
-async def asr(response: Response, audio_file: UploadFile = File(...)):
+async def asr(response: Response, audio_file: UploadFile = File(...), use_context: bool = False):
     try:
         save_path = Path(audio_file.filename)
 
@@ -33,7 +33,7 @@ async def asr(response: Response, audio_file: UploadFile = File(...)):
                 f.write(chunk)
 
         async with gpu_lock:
-            result = model.transribe(save_path)
+            result = model.transribe(save_path, use_context)
         response.headers["asr-engine"] = model.engine_name
         response.headers["asr-engine-version"] = model.engine_version
         response.headers["model"] = model.model_transcribe_name

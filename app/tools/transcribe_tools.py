@@ -233,7 +233,7 @@ class Model:
         return whole_segments
 
 
-    def _generate_transcriptions_of_segments(self, segments_audio: List[np.ndarray]) -> List[Dict[str, Any]]:
+    def _generate_transcriptions_of_segments(self, segments_audio: List[np.ndarray], use_context: bool) -> List[Dict[str, Any]]:
         initial_prompt = ""
         results = []
         
@@ -287,7 +287,7 @@ class Model:
                 word_counts = Counter(words)
                 has_repetition = any(count >= 10 for count in word_counts.values())
 
-                if result['segments'][0]["avg_logprob"] > -1 and result['segments'][0]["no_speech_prob"] < 0.5 and result['segments'][0]["compression_ratio"] < 2.0 and has_repetition is not True and result['language']:
+                if result['segments'][0]["avg_logprob"] > -1 and result['segments'][0]["no_speech_prob"] < 0.5 and result['segments'][0]["compression_ratio"] < 2.0 and has_repetition is not True and use_context:
                     initial_prompt = result["text"]
                 else:
                     initial_prompt = ""
@@ -368,13 +368,13 @@ class Model:
         
         return final_dict
 
-    def transribe(self, path_to_audio: Union[str, Path], filter: bool = True):
+    def transribe(self, path_to_audio: Union[str, Path], use_context: bool = False, filter: bool = True):
         try:
             out_path, channels_ranges, audios_per_channels = silero_gate_each_channel_then_merge_mono(path_to_audio)
             segments_audio, segments = self._cut_silence_intervals(out_path)
             speakers_ranges = self._find_speakers(audios_per_channels)
 
-            results = self._generate_transcriptions_of_segments(segments_audio)
+            results = self._generate_transcriptions_of_segments(segments_audio, use_context)
             whole_segments = self._fix_time_stamps(results, segments)
             whole_segments = self._find_speaekr_per_word(whole_segments, speakers_ranges, True) # przydzielenie słów na podstawie diaryzacji
             whole_segments = self._find_speaekr_per_word(whole_segments, channels_ranges, False) # przydzielenie słów na podstawie kanałów
