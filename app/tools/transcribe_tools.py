@@ -16,6 +16,8 @@ import re
 from app.tools.vad import silero_gate_each_channel_then_merge_mono
 MODEL_DIR = "./models"
 HF_CACHE_DIR = os.path.join(MODEL_DIR, "hf_cache")
+DIARIZE_DIR = os.path.join(MODEL_DIR, "diarization")
+DIARIZE_FILE = os.path.join(DIARIZE_DIR, "model.nemo")
 
 class Model:
     def __init__(self, model_transcribe_name: str, model_diarize_name: str):
@@ -35,43 +37,51 @@ class Model:
         self.model_diarize = None
         self.language = os.getenv("LANGUAGE")
 
+    def _prepare_dirs(self):
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        os.makedirs(HF_CACHE_DIR, exist_ok=True)
+        os.makedirs(DIARIZE_DIR, exist_ok=True)
+
+        print(f"Models directory: {os.path.abspath(MODEL_DIR)}")
+        print(f"HF cache directory: {os.path.abspath(HF_CACHE_DIR)}")
+        print(f"Diarization directory: {os.path.abspath(DIARIZE_DIR)}")
+
+    def _load_or_download_diarization_model(self):
+        if os.path.exists(DIARIZE_FILE):
+            print(f"Loading local diarization model from: {DIARIZE_FILE}")
+            model = SortformerEncLabelModel.restore_from(DIARIZE_FILE)
+            return model.eval()
+
+        print("Local diarization model not found — downloading from the internet...")
+        model = SortformerEncLabelModel.from_pretrained(self.model_diarize_name)
+
+        print(f"Saving diarization model to: {DIARIZE_FILE}")
+        model.save_to(DIARIZE_FILE)
+
+        print("Reloading diarization model from local file...")
+        model = SortformerEncLabelModel.restore_from(DIARIZE_FILE)
+        return model.eval()
+
     def load_models(self):
-        if not os.path.exists(MODEL_DIR):
-            os.makedirs(MODEL_DIR)
-            print(f"Directory created: {MODEL_DIR}")
-        else:
-            print(f"The directory already exists: {MODEL_DIR}")
+        self._prepare_dirs()
 
-        if not os.path.exists(HF_CACHE_DIR):
-            os.makedirs(HF_CACHE_DIR)
-            print(f"HF cache directory has been created: {HF_CACHE_DIR}")
-        else:
-            print(f"The HF cache directory already exists: {HF_CACHE_DIR}")
+        os.environ["HF_HOME"] = os.path.abspath(HF_CACHE_DIR)
 
-        os.environ["HF_HOME"] = HF_CACHE_DIR
-
-        print("Loading the Whisper model")
+        print("Loading Whisper model...")
         self.model_transcribe = whisper.load_model(
             self.model_transcribe_name,
-            device=self.device,
+            device="cuda",
             download_root=MODEL_DIR
         ).eval()
 
-        print("Loading the diarization model")
-        self.model_diarize = SortformerEncLabelModel.from_pretrained(
-            self.model_diarize_name
-        )
-
-        if self.device == "cuda":
-            self.model_diarize.to(self.device)
-
-        self.model_diarize.eval()
+        print("Loading diarization model...")
+        self.model_diarize = self._load_or_download_diarization_model()
 
         self.model_diarize.sortformer_modules.chunk_len = 340
         self.model_diarize.sortformer_modules.chunk_right_context = 40
         self.model_diarize.sortformer_modules.fifo_len = 40
         self.model_diarize.sortformer_modules.spkcache_update_period = 300
-    
+
     def _find_segments(self, kept_ranges: List[Tuple[int, int]]) -> Dict[str, List[Tuple[int, int]]]:
         end_of_seg = 30_000
         seg = 0
