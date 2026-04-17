@@ -9,6 +9,10 @@
 `docker compose up -d --build  `
 <br>
 
+### What does the `use_context` parameter do?
+Whisper processes audio in 30-second segments (you don’t need to split it manually — this happens automatically). If `use_context` is set to `true`, each subsequent 30-second segment will take into account the context from the previous one.
+<br>
+
 ### How to run on GPU or CPU?
 To choose between GPU and CPU, set approptiate value in .env and then go to the `docker-compose.yaml` file and comment or uncomment the appropriate section of the code.<br>
 Keep in mind that Whisper large-v3 requires around 10 GB of VRAM to run smoothly.
