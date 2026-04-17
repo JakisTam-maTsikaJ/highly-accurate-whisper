@@ -10,7 +10,7 @@
 <br>
 
 ### What does the `use_context` parameter do?
-Whisper processes audio in 30-second segments (you don’t need to split it manually — this happens automatically). If `use_context` is set to `true`, each subsequent 30-second segment will take into account the context from the previous one.
+Whisper processes audio in 30-second segments (you don’t need to split it manually - this happens automatically). If `use_context` is set to `true`, each subsequent 30-second segment will take into account the context from the previous one.
 <br>
 
 ### How to run on GPU or CPU?
