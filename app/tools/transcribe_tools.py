@@ -70,7 +70,7 @@ class Model:
         print("Loading Whisper model...")
         self.model_transcribe = whisper.load_model(
             self.model_transcribe_name,
-            device="cuda",
+            device=self.device,
             download_root=MODEL_DIR
         ).eval()
 
